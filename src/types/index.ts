@@ -53,6 +53,13 @@ export interface PaginationQuery {
 }
 
 // ─── Auth Request (add this) ──────────────────────────
+// export interface AuthRequest extends Request {
+//   user?: IUser; // or whatever your User interface is called
+// }
+
 export interface AuthRequest extends Request {
-  user?: IUser; // or whatever your User interface is called
+  user?: {
+    _id: string;
+    role: 'admin' | 'member' | 'viewer';
+  };
 }

@@ -27,8 +27,13 @@ export const protect = asyncHandler(async (req: AuthRequest, _res: Response, nex
     return next(new AppError('This account has been deactivated.', 403));
   }
 
-  req.user = currentUser;
-  next();
+  // req.user = currentUser;
+  // next();
+
+  req.user = {
+   _id: currentUser._id.toString(),
+   role: currentUser.role,
+  };
 });
 
 // ─── Restrict: role-based access ──────────────────────────────────────────────
