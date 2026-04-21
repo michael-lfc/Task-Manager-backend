@@ -19,15 +19,16 @@
     "morgan": "^1.10.0",
     "socket.io": "^4.8.3",
     "winston": "^3.11.0",
-    "zod": "^4.3.6"
-  },
-  "devDependencies": {
+    "zod": "^4.3.6",
+
     "@types/bcryptjs": "^2.4.6",
     "@types/cors": "^2.8.17",
     "@types/express": "^5.0.6",
     "@types/jsonwebtoken": "^9.0.5",
     "@types/morgan": "^1.9.9",
-    "@types/ms": "^2.1.0",
+    "@types/ms": "^2.1.0"
+  },
+  "devDependencies": {
     "@types/node": "^25.0.9",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3"
