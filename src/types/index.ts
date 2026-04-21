@@ -1,4 +1,5 @@
-import type { Request } from 'express';
+// import type { Request } from 'express';
+import { Request } from 'express-serve-static-core';
 import { IUser } from '../models/User.js'; // Import your User model interface
 
 // ─── Project Status ───────────────────────────────────
