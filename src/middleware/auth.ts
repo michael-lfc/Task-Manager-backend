@@ -1,5 +1,5 @@
 import { Response, NextFunction } from 'express';
-import { AuthRequest } from '../types/index.js';
+import type { AuthRequest } from '../types/index.js';
 import { AppError, asyncHandler } from '../utils/appError.js';
 import { verifyToken } from '../utils/jwt.js';
 import User from '../models/User.js';
