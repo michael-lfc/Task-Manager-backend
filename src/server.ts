@@ -13,11 +13,11 @@ import errorHandler from './middleware/errorHandler.js';
 import logger from './utils/logger.js';
 
 const app = express();
-const PORT = process.env.PORT ?? 5000;
+const PORT = process.env.PORT || 5000;
 
 //
 // ─────────────────────────────────────────────
-// 🌐 CREATE HTTP SERVER (IMPORTANT FOR SOCKET.IO)
+// 🌐 HTTP SERVER (required for socket.io)
 // ─────────────────────────────────────────────
 //
 const server = http.createServer(app);
@@ -29,29 +29,34 @@ const server = http.createServer(app);
 //
 export const io = new Server(server, {
   cors: {
-    origin: process.env.CLIENT_URL ?? 'http://localhost:3000',
+    origin: process.env.CLIENT_URL,
+    methods: ['GET', 'POST'],
     credentials: true,
   },
 });
 
-// store online users
-const onlineUsers = new Map<string, string>();
+// ⚡ better structure (still simple but cleaner)
+interface OnlineUsers {
+  [userId: string]: string;
+}
+
+const onlineUsers: OnlineUsers = {};
 
 io.on('connection', (socket) => {
   logger.info(`Socket connected: ${socket.id}`);
 
-  // user joins their personal room
   socket.on('join', (userId: string) => {
-    onlineUsers.set(userId, socket.id);
+    onlineUsers[userId] = socket.id;
     socket.join(userId);
   });
 
   socket.on('disconnect', () => {
-    for (const [userId, socketId] of onlineUsers.entries()) {
-      if (socketId === socket.id) {
-        onlineUsers.delete(userId);
-        break;
-      }
+    const userId = Object.keys(onlineUsers).find(
+      (key) => onlineUsers[key] === socket.id
+    );
+
+    if (userId) {
+      delete onlineUsers[userId];
     }
 
     logger.info(`Socket disconnected: ${socket.id}`);
@@ -60,81 +65,20 @@ io.on('connection', (socket) => {
 
 //
 // ─────────────────────────────────────────────
-// 🔐 SECURITY MIDDLEWARE
+// 🔐 MIDDLEWARE
 // ─────────────────────────────────────────────
 //
 app.use(helmet());
 
 app.use(
   cors({
-    origin: process.env.CLIENT_URL ?? 'http://localhost:3000',
+    origin: process.env.CLIENT_URL,
     credentials: true,
   })
 );
 
-//
-// ─────────────────────────────────────────────
-// 🚦 RATE LIMITING
-// ─────────────────────────────────────────────
-//
-const requestCounts = new Map<
-  string,
-  { count: number; resetTime: number }
->();
-
-const rateLimiter = (req: Request, res: Response, next: any) => {
-  const ip = req.ip ?? 'unknown';
-  const now = Date.now();
-  const windowMs = 15 * 60 * 1000;
-  const max = 100;
-
-  const record = requestCounts.get(ip);
-
-  if (!record || now > record.resetTime) {
-    requestCounts.set(ip, { count: 1, resetTime: now + windowMs });
-    return next();
-  }
-
-  if (record.count >= max) {
-    return res.status(429).json({
-      status: 'fail',
-      message: 'Too many requests, please try again later.',
-    });
-  }
-
-  record.count++;
-  next();
-};
-
-app.use('/api', rateLimiter);
-
-//
-// ─────────────────────────────────────────────
-// 📦 BODY PARSING
-// ─────────────────────────────────────────────
-//
 app.use(express.json({ limit: '10kb' }));
 app.use(express.urlencoded({ extended: true }));
-
-//
-// ─────────────────────────────────────────────
-// 🧹 NOSQL SANITIZER
-// ─────────────────────────────────────────────
-//
-app.use((req: Request, _res: Response, next) => {
-  const sanitize = (obj: Record<string, unknown>) => {
-    for (const key in obj) {
-      if (key.startsWith('$') || key.includes('.')) {
-        delete obj[key];
-      }
-    }
-  };
-
-  if (req.body) sanitize(req.body);
-  if (req.params) sanitize(req.params as Record<string, unknown>);
-
-  next();
-});
 
 //
 // ─────────────────────────────────────────────
@@ -151,10 +95,10 @@ if (process.env.NODE_ENV === 'development') {
 // ─────────────────────────────────────────────
 //
 app.get('/health', (_req: Request, res: Response) => {
-  res.status(200).json({
+  res.json({
     status: 'ok',
+    websocket: 'active',
     environment: process.env.NODE_ENV,
-    timestamp: new Date().toISOString(),
   });
 });
 
@@ -165,16 +109,21 @@ app.get('/health', (_req: Request, res: Response) => {
 //
 app.use('/api/v1', router);
 
+//
+// ─────────────────────────────────────────────
+// ❌ 404 HANDLER
+// ─────────────────────────────────────────────
+//
 app.use((req: Request, res: Response) => {
   res.status(404).json({
     status: 'fail',
-    message: `Route ${req.originalUrl} not found.`,
+    message: `Route ${req.originalUrl} not found`,
   });
 });
 
 //
 // ─────────────────────────────────────────────
-// ⚠️ GLOBAL ERROR HANDLER
+// ⚠️ ERROR HANDLER
 // ─────────────────────────────────────────────
 //
 app.use(errorHandler);
