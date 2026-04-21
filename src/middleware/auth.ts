@@ -6,6 +6,7 @@ import User from '../models/User.js';
 
 // ─── Protect: verify JWT ──────────────────────────────────────────────────────
 export const protect = asyncHandler(async (req: AuthRequest, _res: Response, next: NextFunction) => {
+  console.log(req.headers);
   let token: string | undefined;
 
   if (req.headers.authorization?.startsWith('Bearer ')) {
