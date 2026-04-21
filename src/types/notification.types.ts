@@ -1,0 +1,18 @@
+export type NotificationType =
+  // 👤 AUTH
+  | "WELCOME"
+  | "USER_REGISTERED"
+
+  // 📁 PROJECT
+  | "PROJECT_CREATED"
+  | "PROJECT_MEMBER_ADDED"
+  | "PROJECT_UPDATED"
+  | "PROJECT_DELETED"
+
+  // 👥 TASK
+  | "TASK_CREATED"
+  | "TASK_UPDATED"
+  | "TASK_STATUS_CHANGED"
+  | "TASK_ASSIGNED"
+  | "TASK_COMMENT"
+  | "TASK_DELETED";
