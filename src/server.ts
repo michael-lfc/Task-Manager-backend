@@ -17,7 +17,7 @@ const PORT = process.env.PORT || 5000;
 
 //
 // ─────────────────────────────────────────────
-// 🌐 HTTP SERVER (required for socket.io)
+// 🌐 HTTP SERVER
 // ─────────────────────────────────────────────
 //
 const server = http.createServer(app);
@@ -29,34 +29,34 @@ const server = http.createServer(app);
 //
 export const io = new Server(server, {
   cors: {
-    origin: process.env.CLIENT_URL,
+    origin: process.env.CLIENT_URL || '*',
     methods: ['GET', 'POST'],
     credentials: true,
   },
 });
 
-// ⚡ better structure (still simple but cleaner)
-interface OnlineUsers {
-  [userId: string]: string;
-}
-
-const onlineUsers: OnlineUsers = {};
+//
+// Better typing for online users
+//
+const onlineUsers = new Map<string, string>();
 
 io.on('connection', (socket) => {
   logger.info(`Socket connected: ${socket.id}`);
+  console.log("User connected:", socket.id); // 👈 debug
 
+  // join user room
   socket.on('join', (userId: string) => {
-    onlineUsers[userId] = socket.id;
+    onlineUsers.set(userId, socket.id);
     socket.join(userId);
   });
 
+  // cleanup on disconnect
   socket.on('disconnect', () => {
-    const userId = Object.keys(onlineUsers).find(
-      (key) => onlineUsers[key] === socket.id
-    );
-
-    if (userId) {
-      delete onlineUsers[userId];
+    for (const [userId, socketId] of onlineUsers.entries()) {
+      if (socketId === socket.id) {
+        onlineUsers.delete(userId);
+        break;
+      }
     }
 
     logger.info(`Socket disconnected: ${socket.id}`);
@@ -72,7 +72,7 @@ app.use(helmet());
 
 app.use(
   cors({
-    origin: process.env.CLIENT_URL,
+    origin: process.env.CLIENT_URL || '*',
     credentials: true,
   })
 );
@@ -111,7 +111,7 @@ app.use('/api/v1', router);
 
 //
 // ─────────────────────────────────────────────
-// ❌ 404 HANDLER
+// ❌ 404
 // ─────────────────────────────────────────────
 //
 app.use((req: Request, res: Response) => {
