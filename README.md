@@ -7,7 +7,7 @@
 ## 🌐 Live API
 
 ```
-https://task-manager-backend-dbdx.onrender.com/health
+GET https://task-manager-backend-dbdx.onrender.com/health
 ```
 
 **Health Check:**
