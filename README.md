@@ -7,12 +7,12 @@
 ## 🌐 Live API
 
 ```
-https://aurum-backend.onrender.com
+https://task-manager-backend-dbdx.onrender.com
 ```
 
 **Health Check:**
 ```
-GET https://aurum-backend.onrender.com/health
+GET https://task-manager-backend-dbdx.onrender.com/health
 ```
 
 ---
