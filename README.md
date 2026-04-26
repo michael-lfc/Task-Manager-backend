@@ -328,14 +328,15 @@ const socket = io('https://aurum-backend.onrender.com', {
 
 ## 🛡️ Security
 
-- **JWT Authentication** — all protected routes require a valid Bearer token
-- **Password Hashing** — bcryptjs with 12 salt rounds
-- **Helmet** — secure HTTP headers
-- **CORS** — restricted to `CLIENT_URL`
-- **NoSQL Sanitization** — strips `$` and `.` from request bodies
-- **Custom Rate Limiting** — 100 requests per 15 minutes per IP
-- **Zod Validation** — all request bodies validated before hitting services
-- **Role-based Access** — `admin`, `member`, `viewer` roles enforced at route level
+🛡️ Security
+JWT Authentication — all protected routes require a valid Bearer token
+Password Hashing — bcryptjs with 12 salt rounds
+Helmet — secure HTTP headers
+CORS — restricted to CLIENT_URL
+NoSQL Sanitization — strips $ and . from request bodies
+Custom Rate Limiting — 100 requests per 15 minutes per IP
+Zod Validation — all request bodies validated before hitting services
+Role-based Access — The User model supports `admin`, `member`, and `viewer` roles, and the `restrictTo` middleware is already built. Global role enforcement will be activated in a future update. Currently, all protected routes require a valid JWT and destructive project actions are restricted to the project owner.
 
 ---
 
