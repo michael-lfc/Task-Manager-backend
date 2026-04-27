@@ -181,7 +181,8 @@ const server = http.createServer(app);
 // ─────────────────────────────────────────────
 //
 const allowedOrigins = [
-  'http://localhost:5173',           // Local dev
+  'http://localhost:5173', 
+  'http://localhost:3000',          // Local dev
   'https://aurum-frontend.vercel.app', // 🔥 REPLACE with your actual Vercel URL
 ];
 
