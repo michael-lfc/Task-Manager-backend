@@ -35,33 +35,37 @@ export const io = new Server(server, {
   },
 });
 
-//
-// Better typing for online users
-//
-const onlineUsers = new Map<string, string>();
 
 io.on('connection', (socket) => {
-  logger.info(`Socket connected: ${socket.id}`);
-  console.log("User connected:", socket.id); // 👈 debug
+  logger.info(`Socket connected: ${socket.id}`)
 
-  // join user room
-  socket.on('join', (userId: string) => {
-    onlineUsers.set(userId, socket.id);
-    socket.join(userId);
-  });
+  const userId = socket.handshake.auth?.userId
 
-  // cleanup on disconnect
+  console.log('🔍 AUTH DATA:', socket.handshake.auth)
+
+  if (userId) {
+    socket.join(userId)
+    console.log('✅ JOINED ROOM:', userId)
+  } else {
+    console.log('❌ NO USER ID FOUND')
+  }
+
+  // ── Join project room ──────────────────────────
+  socket.on('join:project', ({ projectId }: { projectId: string }) => {
+    socket.join(projectId)
+    console.log(`📁 Socket ${socket.id} joined project room: ${projectId}`)
+  })
+
+  // ── Leave project room ─────────────────────────
+  socket.on('leave:project', ({ projectId }: { projectId: string }) => {
+    socket.leave(projectId)
+    console.log(`📁 Socket ${socket.id} left project room: ${projectId}`)
+  })
+
   socket.on('disconnect', () => {
-    for (const [userId, socketId] of onlineUsers.entries()) {
-      if (socketId === socket.id) {
-        onlineUsers.delete(userId);
-        break;
-      }
-    }
-
-    logger.info(`Socket disconnected: ${socket.id}`);
-  });
-});
+    logger.info(`Socket disconnected: ${socket.id}`)
+  })
+})
 
 //
 // ─────────────────────────────────────────────

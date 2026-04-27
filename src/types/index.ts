@@ -1,6 +1,5 @@
 import type { Request } from 'express';
 // import { Request } from 'express';
-import { IUser } from '../models/User.js'; // Import your User model interface
 
 // ─── Project Status ───────────────────────────────────
 export type ProjectStatus =

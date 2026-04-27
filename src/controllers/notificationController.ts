@@ -1,72 +1,3 @@
-// import { Request, Response } from "express";
-// import { asyncHandler, AppError } from "../utils/appError.js";
-// import {
-//   getUserNotifications,
-//   markNotificationAsRead,
-//   markAllAsRead,
-//   getUnreadCount,
-// } from "../services/notificationService.js";
-
-// // GET /notifications
-// export const getMyNotifications = asyncHandler(async (req: Request, res: Response) => {
-//   if (!req.user) throw new AppError("Not authenticated", 401);
-
-//   const notifications = await getUserNotifications(req.user._id.toString());
-
-//   res.json({
-//     status: "success",
-//     data: notifications,
-//   });
-// });
-
-// // PATCH /notifications/:id/read
-// export const markAsRead = asyncHandler(async (req: Request, res: Response) => {
-//   if (!req.user) throw new AppError("Not authenticated", 401);
-
-//   // Fix: Ensure params.id is a string, not string[]
-//   const notificationId = Array.isArray(req.params.id) 
-//     ? req.params.id[0]  // Take first if it's an array
-//     : req.params.id;     // Use as is if it's a string
-
-//   if (!notificationId) {
-//     throw new AppError("Notification ID is required", 400);
-//   }
-
-//   const updated = await markNotificationAsRead(
-//     notificationId,
-//     req.user._id.toString()
-//   );
-
-//   res.json({
-//     status: "success",
-//     data: updated,
-//   });
-// });
-
-// // PATCH /notifications/read-all
-// export const readAll = asyncHandler(async (req: Request, res: Response) => {
-//   if (!req.user) throw new AppError("Not authenticated", 401);
-
-//   await markAllAsRead(req.user._id.toString());
-
-//   res.json({
-//     status: "success",
-//     message: "All notifications marked as read",
-//   });
-// });
-
-// // GET /notifications/unread-count
-// export const unreadCount = asyncHandler(async (req: Request, res: Response) => {
-//   if (!req.user) throw new AppError("Not authenticated", 401);
-
-//   const count = await getUnreadCount(req.user._id.toString());
-
-//   res.json({
-//     status: "success",
-//     data: { count },
-//   });
-// });
-
 import { Request, Response } from "express";
 import { asyncHandler, AppError } from "../utils/appError.js";
 
@@ -91,7 +22,9 @@ export const getMyNotifications = asyncHandler(
     res.status(200).json({
       status: "success",
       results: notifications.length,
-      data: notifications,
+      data: {
+        notifications,
+      }
     });
   }
 );

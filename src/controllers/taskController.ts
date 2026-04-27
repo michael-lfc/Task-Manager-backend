@@ -93,21 +93,25 @@ export const deleteTask = asyncHandler(
   }
 )
 
-// ─── Add Comment ──────────────────────────────────────
+// ─── Add Comment (FIXED - Returns populated comment) ──
 export const addComment = asyncHandler(
   async (req: Request, res: Response) => {
     if (!req.user) throw new AppError('Not authenticated.', 401)
 
-    const task = await taskService.addComment(
+    const updatedTask = await taskService.addComment(
       toStringParam(req.params.id),
       req.user._id.toString(),
       req.body
     )
 
+    // 🔥 FIXED: Get the last comment from the POPULATED task
+    const populatedTask = updatedTask as any
+    const newComment = populatedTask.comments[populatedTask.comments.length - 1]
+
     res.status(201).json({
       status: 'success',
       data: {
-        comment: task.comments[task.comments.length - 1],
+        comment: newComment,
       },
     })
   }

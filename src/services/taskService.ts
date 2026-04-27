@@ -3,6 +3,7 @@ import Task, { type TaskDocument } from '../models/Task.js'
 import Project from '../models/Project.js'
 import { AppError } from '../utils/appError.js'
 import { createNotification } from './notificationService.js'
+import { io } from '../server.js'
 
 import type {
   CreateTaskInput,
@@ -29,9 +30,15 @@ const assertProjectAccess = async (projectId: string, userId: string) => {
   if (!isMember) throw new AppError('Access denied.', 403)
 }
 
-const recalculateProgress = async (
-  projectId: mongoose.Types.ObjectId
-) => {
+// 🔥 CENTRALIZED POPULATE FUNCTION
+const populateTask = (taskId: string) => {
+  return Task.findById(taskId)
+    .populate('assignee', 'name avatar email')
+    .populate('reporter', 'name avatar email')
+    .populate('comments.author', 'name avatar email')
+}
+
+const recalculateProgress = async (projectId: mongoose.Types.ObjectId) => {
   const tasks = await Task.find({ project: projectId })
 
   if (tasks.length === 0) {
@@ -61,18 +68,20 @@ const createTask = async (
     reporter: userId,
   })
 
-  // 🔔 Notify assignee
-  if (task.assignee) {
-    await createNotification({
-      userId: task.assignee.toString(),
-      type: 'TASK_CREATED',
-      message: `You were assigned a task: ${task.title}`,
-      projectId: task.project.toString(),
+  // 🔔 Notify assignee if one was set (and it's not the creator)
+  if (body.assignee && body.assignee !== userId) {
+    createNotification({
+      userId: body.assignee,
+      type: 'TASK_ASSIGNED',
+      message: `You were assigned to "${task.title}"`,
+      projectId: body.project,
       taskId: task._id.toString(),
-    })
+    }).catch(console.error)
   }
 
-  return task
+  // Return populated task
+  const populatedTask = await populateTask(task._id.toString())
+  return populatedTask as TaskDocument
 }
 
 //
@@ -101,12 +110,13 @@ const getTasksByProject = async (
     .sort(sort)
     .populate('assignee', 'name avatar')
     .populate('reporter', 'name avatar')
+    .populate('comments.author', 'name avatar email')
 
   const grouped: Record<TaskStatus, TaskDocument[]> = {
-    'todo': [],
+    todo: [],
     'in-progress': [],
     'in-review': [],
-    'done': [],
+    done: [],
   }
 
   tasks.forEach(task => {
@@ -121,99 +131,14 @@ const getTasksByProject = async (
 // GET SINGLE TASK
 // ─────────────────────────────────────────────
 //
-const getTask = async (
-  taskId: string,
-  userId: string
-): Promise<TaskDocument> => {
-  const task = await Task.findById(taskId)
-    .populate('assignee', 'name avatar email')
-    .populate('reporter', 'name avatar email')
-    .populate('comments.author', 'name avatar')
+const getTask = async (taskId: string, userId: string) => {
+  const task = await populateTask(taskId)
 
   if (!task) throw new AppError('Task not found.', 404)
 
   await assertProjectAccess(task.project.toString(), userId)
 
   return task
-}
-
-//
-// ─────────────────────────────────────────────
-// UPDATE TASK (FIXED)
-// ─────────────────────────────────────────────
-//
-const updateTask = async (
-  taskId: string,
-  userId: string,
-  body: UpdateTaskInput
-): Promise<TaskDocument> => {
-  const task = await Task.findById(taskId)
-
-  if (!task) throw new AppError('Task not found.', 404)
-
-  await assertProjectAccess(task.project.toString(), userId)
-
-  const oldStatus = task.status
-
-  const updated = await Task.findByIdAndUpdate(
-    taskId,
-    body,
-    { new: true, runValidators: true }
-  )
-
-  // 🔔 Correct notification (uses updated, not task)
-  if (
-    body.status &&
-    body.status !== oldStatus &&
-    updated?.assignee
-  ) {
-    await createNotification({
-      userId: updated.assignee.toString(),
-      type: 'TASK_UPDATED',
-      message: `Task "${updated.title}" moved to ${body.status}`,
-      projectId: updated.project.toString(),
-      taskId: updated._id.toString(),
-    })
-  }
-
-  if (body.status) {
-    await recalculateProgress(task.project)
-  }
-
-  return updated as TaskDocument
-}
-
-//
-// ─────────────────────────────────────────────
-// DELETE TASK
-// ─────────────────────────────────────────────
-//
-const deleteTask = async (
-  taskId: string,
-  userId: string
-): Promise<void> => {
-  const task = await Task.findById(taskId)
-
-  if (!task) throw new AppError('Task not found.', 404)
-
-  await assertProjectAccess(task.project.toString(), userId)
-
-  const projectId = task.project
-
-  // 🔔 Notify assignee before delete
-  if (task.assignee) {
-    await createNotification({
-      userId: task.assignee.toString(),
-      type: 'TASK_DELETED',
-      message: `Task "${task.title}" was deleted`,
-      projectId: task.project.toString(),
-      taskId: task._id.toString(),
-    })
-  }
-
-  await task.deleteOne()
-
-  await recalculateProgress(projectId)
 }
 
 //
@@ -232,30 +157,134 @@ const addComment = async (
 
   await assertProjectAccess(task.project.toString(), userId)
 
-  const comment = {
+  task.comments.push({
     _id: new mongoose.Types.ObjectId(),
     author: new mongoose.Types.ObjectId(userId),
     body: body.body,
     createdAt: new Date(),
-  }
+  })
 
-  task.comments.push(comment)
   await task.save()
 
-  await task.populate('comments.author', 'name avatar')
+  const updatedTask = await populateTask(taskId)
 
-  // 🔔 Notify assignee
+  if (!updatedTask) {
+    throw new AppError('Task not found.', 404)
+  }
+
+  io.to(updatedTask.project.toString()).emit('task:updated', updatedTask)
+
+  // 🔔 Notify assignee AND reporter (excluding the commenter)
+  const recipients = new Set<string>()
+
+  if (updatedTask.assignee) {
+    recipients.add(updatedTask.assignee._id.toString())
+  }
+  if (updatedTask.reporter) {
+    recipients.add(updatedTask.reporter._id.toString())
+  }
+
+  recipients.delete(userId)
+
+  for (const recipientId of recipients) {
+    createNotification({
+      userId: recipientId,
+      type: 'TASK_COMMENT',
+      message: `New comment on task "${updatedTask.title}"`,
+      projectId: updatedTask.project.toString(),
+      taskId: updatedTask._id.toString(),
+    }).catch(console.error)
+  }
+
+  return updatedTask as TaskDocument
+}
+
+//
+// ─────────────────────────────────────────────
+// UPDATE TASK
+// ─────────────────────────────────────────────
+//
+const updateTask = async (
+  taskId: string,
+  userId: string,
+  body: UpdateTaskInput
+): Promise<TaskDocument> => {
+  const task = await Task.findById(taskId)
+
+  if (!task) throw new AppError('Task not found.', 404)
+
+  await assertProjectAccess(task.project.toString(), userId)
+
+  const oldStatus = task.status
+  const oldAssignee = task.assignee?.toString()
+
+  const updated = await Task.findByIdAndUpdate(taskId, body, {
+    new: true,
+    runValidators: true,
+  })
+
+  if (!updated) throw new AppError('Task not found.', 404)
+
+  // 🔔 TASK_UPDATED — status changed and task has an assignee
+  if (body.status && body.status !== oldStatus && updated.assignee) {
+    const assigneeId = updated.assignee.toString()
+    if (assigneeId !== userId) {
+      createNotification({
+        userId: assigneeId,
+        type: 'TASK_UPDATED',
+        message: `Task "${updated.title}" moved to ${body.status.replace(/-/g, ' ')}`,
+        projectId: updated.project.toString(),
+        taskId: updated._id.toString(),
+      }).catch(console.error)
+    }
+  }
+
+  // 🔔 TASK_ASSIGNED — assignee changed to someone new
+  if (body.assignee && body.assignee !== oldAssignee && body.assignee !== userId) {
+    createNotification({
+      userId: body.assignee,
+      type: 'TASK_ASSIGNED',
+      message: `You were assigned to "${updated.title}"`,
+      projectId: updated.project.toString(),
+      taskId: updated._id.toString(),
+    }).catch(console.error)
+  }
+
+  if (body.status) {
+    await recalculateProgress(task.project)
+  }
+
+  const populatedTask = await populateTask(taskId)
+  return populatedTask as TaskDocument
+}
+
+//
+// ─────────────────────────────────────────────
+// DELETE TASK
+// ─────────────────────────────────────────────
+//
+const deleteTask = async (taskId: string, userId: string) => {
+  const task = await Task.findById(taskId)
+
+  if (!task) throw new AppError('Task not found.', 404)
+
+  await assertProjectAccess(task.project.toString(), userId)
+
+  const projectId = task.project
+
   if (task.assignee && task.assignee.toString() !== userId) {
     await createNotification({
       userId: task.assignee.toString(),
-      type: 'TASK_COMMENT',
-      message: `New comment on task "${task.title}"`,
+      type: 'TASK_DELETED',
+      message: `Task "${task.title}" was deleted`,
       projectId: task.project.toString(),
       taskId: task._id.toString(),
     })
   }
 
-  return task
+  await task.deleteOne()
+
+  await recalculateProgress(projectId)
 }
 
 //
@@ -290,7 +319,13 @@ const deleteComment = async (
 
   await task.save()
 
-  return task
+  const updatedTask = await populateTask(taskId)
+
+  if (!updatedTask) throw new AppError('Task not found.', 404)
+
+  io.to(updatedTask.project.toString()).emit('task:updated', updatedTask)
+
+  return updatedTask as TaskDocument
 }
 
 //
@@ -304,7 +339,7 @@ const reorderTasks = async (
   taskId: string,
   newStatus: TaskStatus,
   newPosition: number
-): Promise<void> => {
+) => {
   await assertProjectAccess(projectId, userId)
 
   const task = await Task.findById(taskId)

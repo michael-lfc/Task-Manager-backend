@@ -1,4 +1,4 @@
-import { Router }          from 'express'
+import { Router } from 'express'
 import {
   createProject,
   getProjects,
@@ -7,45 +7,51 @@ import {
   deleteProject,
   addMember,
   removeMember,
-}                          from '../controllers/projectController.js'
-import { protect }         from '../middleware/auth.js'
-import { validate }        from '../middleware/validate.js'
+} from '../controllers/projectController.js'
+
+import { protect } from '../middleware/auth.js'
+import { validate } from '../middleware/validate.js'
+
 import {
   createProjectSchema,
   updateProjectSchema,
   projectIdSchema,
-}                          from '../validators/project.validator.js'
+  addMemberSchema,
+  removeMemberSchema,
+} from '../validators/project.validator.js'
 
 const router = Router()
 
-// ─── All Project Routes Require Authentication ────────
 router.use(protect)
 
-// ─── Collection Routes ────────────────────────────────
+// ─── PROJECT COLLECTION ─────────────────────
 router
   .route('/')
   .get(getProjects)
   .post(validate(createProjectSchema), createProject)
 
-// ─── Member Routes ────────────────────────────────────
-// Must be registered BEFORE /:id to avoid routing conflict
+// ─── MEMBERS ────────────────────────────────
 router.post(
-  '/:id/members/:memberId',
-  validate(projectIdSchema),
+  '/:id/members',
+  validate(addMemberSchema),
   addMember
 )
 
 router.delete(
-  '/:id/members/:memberId',
-  validate(projectIdSchema),
+  '/:id/members',
+  validate(removeMemberSchema),
   removeMember
 )
 
-// ─── Single Resource Routes ───────────────────────────
+// ─── SINGLE PROJECT ─────────────────────────
 router
   .route('/:id')
   .get(validate(projectIdSchema), getProject)
-  .patch(validate(projectIdSchema), validate(updateProjectSchema), updateProject)
+  .patch(
+    validate(projectIdSchema),
+    validate(updateProjectSchema),
+    updateProject
+  )
   .delete(validate(projectIdSchema), deleteProject)
 
 export default router

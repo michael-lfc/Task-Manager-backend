@@ -35,6 +35,8 @@ export const protect = asyncHandler(async (req: AuthRequest, _res: Response, nex
    _id: currentUser._id.toString(),
    role: currentUser.role,
   };
+
+  next();
 });
 
 // ─── Restrict: role-based access ──────────────────────────────────────────────

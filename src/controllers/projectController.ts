@@ -40,21 +40,33 @@ export const getProjects = asyncHandler(
 // ─── Get Single Project ───────────────────────────────
 export const getProject = asyncHandler(
   async (req: Request, res: Response) => {
-    if (!req.user) throw new AppError('Not authenticated.', 401)
+    if (!req.user) {
+      throw new AppError('Not authenticated.', 401)
+    }
 
-    const projectId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id
-    
+    const projectId = Array.isArray(req.params.id)
+      ? req.params.id[0]
+      : req.params.id
+
+    if (!projectId) {
+      throw new AppError('Project ID is required.', 400)
+    }
+
     const project = await projectService.getProject(
       projectId,
       req.user._id.toString()
     )
-    
+
     res.status(200).json({
       status: 'success',
-      data:   { project },
+      data: {
+        project,
+      },
     })
   }
 )
+
+
 
 // ─── Update Project ───────────────────────────────────
 export const updateProject = asyncHandler(
@@ -95,35 +107,69 @@ export const deleteProject = asyncHandler(
   }
 )
 
-// ─── Add Member ───────────────────────────────────────
 export const addMember = asyncHandler(
   async (req: Request, res: Response) => {
     if (!req.user) throw new AppError('Not authenticated.', 401)
 
-    const projectId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id
-    const memberId = Array.isArray(req.params.memberId) ? req.params.memberId[0] : req.params.memberId
+    const projectId = Array.isArray(req.params.id)
+      ? req.params.id[0]
+      : req.params.id
+
+    const email = req.body.email  // ✅ FIXED
 
     const project = await projectService.addMember(
       projectId,
       req.user._id.toString(),
-      memberId
+      email
     )
 
     res.status(200).json({
-      status:  'success',
+      status: 'success',
       message: 'Member added successfully.',
-      data:    { project },
+      data: { project },
     })
   }
 )
 
-// ─── Remove Member ────────────────────────────────────
+
+// export const removeMember = asyncHandler(
+//   async (req: Request, res: Response) => {
+//     if (!req.user) throw new AppError('Not authenticated.', 401)
+
+//     const projectId = req.params.id as string
+//     const memberId = req.body.memberId
+
+//     if (!memberId) {
+//       throw new AppError('memberId is required', 400)
+//     }
+
+//     const project = await projectService.removeMember(
+//       projectId,
+//       req.user._id.toString(),
+//       memberId
+//     )
+
+//     res.status(200).json({
+//       status: 'success',
+//       message: 'Member removed successfully.',
+//       data: { project },
+//     })
+//   }
+// )
+
 export const removeMember = asyncHandler(
   async (req: Request, res: Response) => {
     if (!req.user) throw new AppError('Not authenticated.', 401)
 
-    const projectId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id
-    const memberId = Array.isArray(req.params.memberId) ? req.params.memberId[0] : req.params.memberId
+    const projectId = Array.isArray(req.params.id)
+      ? req.params.id[0]
+      : req.params.id
+
+    const memberId = req.body.memberId
+
+    if (!memberId) {
+      throw new AppError('Member ID is required', 400)
+    }
 
     const project = await projectService.removeMember(
       projectId,
@@ -132,9 +178,9 @@ export const removeMember = asyncHandler(
     )
 
     res.status(200).json({
-      status:  'success',
+      status: 'success',
       message: 'Member removed successfully.',
-      data:    { project },
+      data: { project },
     })
   }
 )

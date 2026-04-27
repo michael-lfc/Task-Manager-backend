@@ -123,6 +123,25 @@ export const projectIdSchema = z.object({
   }),
 })
 
+export const addMemberSchema = z.object({
+  body: z.object({
+    email: z
+      .string({ message: 'Email is required' })
+      .email('Invalid email format')
+      .toLowerCase()
+      .trim(),
+  }),
+})
+
+export const removeMemberSchema = z.object({
+  params: z.object({
+    id: z.string(),
+  }),
+  body: z.object({
+    memberId: z.string().min(1),
+  }),
+})
+
 // ─── Inferred Types ───────────────────────────────────
 export type CreateProjectInput = z.infer<typeof createProjectSchema>['body']
 export type UpdateProjectInput = z.infer<typeof updateProjectSchema>['body']

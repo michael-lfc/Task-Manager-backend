@@ -1,7 +1,8 @@
 import mongoose from "mongoose"
-import Project, { type ProjectDocument } from "../models/Project.js"
+import Project from "../models/Project.js"
 import { AppError } from "../utils/appError.js"
 import { createNotification } from "./notificationService.js"
+import User from "../models/User.js"
 
 import type {
   CreateProjectInput,
@@ -11,32 +12,39 @@ import type {
 import type { PaginationQuery } from "../types/index.js"
 
 // ─────────────────────────────────────────────
+// SAFE ID HELPER (FIXES "never" ERROR)
+// ─────────────────────────────────────────────
+const getId = (value: any): string =>
+  typeof value === "object" && value?._id
+    ? value._id.toString()
+    : value.toString()
+
+// ─────────────────────────────────────────────
 // CREATE PROJECT
 // ─────────────────────────────────────────────
 const createProject = async (
   body: CreateProjectInput,
   ownerId: string
-): Promise<ProjectDocument> => {
+) => {
   const members = [
     new mongoose.Types.ObjectId(ownerId),
     ...(body.members?.map(id => new mongoose.Types.ObjectId(id)) ?? []),
   ]
 
-  const uniqueMembers = [
-    ...new Map(members.map(m => [m.toString(), m])).values(),
-  ]
+  const uniqueMembers = Array.from(
+    new Map(members.map(m => [m.toString(), m])).values()
+  )
 
   const project = await Project.create({
     ...body,
-    owner: ownerId,
+    owner: new mongoose.Types.ObjectId(ownerId),
     members: uniqueMembers,
   })
 
-  // 🔔 NOTIFICATION: PROJECT CREATED
   await createNotification({
     userId: ownerId,
     type: "PROJECT_CREATED",
-    message: `Project "${project.title}" created successfully 🚀`,
+    message: `Project "${project.title}" created 🚀`,
     projectId: project._id.toString(),
   })
 
@@ -47,31 +55,19 @@ const createProject = async (
 // GET PROJECTS
 // ─────────────────────────────────────────────
 const getProjects = async (userId: string, query: PaginationQuery) => {
-  const {
-    page = "1",
-    limit = "10",
-    sort = "-createdAt",
-    search,
-  } = query
-
-  const pageNum = Math.max(1, parseInt(page, 10))
-  const limitNum = Math.min(50, Math.max(1, parseInt(limit, 10)))
+  const pageNum = Number(query.page || 1)
+  const limitNum = Math.min(Number(query.limit || 10), 50)
   const skip = (pageNum - 1) * limitNum
 
-  const filter: any = {
+  const filter = {
     $or: [
       { owner: new mongoose.Types.ObjectId(userId) },
       { members: new mongoose.Types.ObjectId(userId) },
     ],
   }
 
-  if (search) {
-    filter.$text = { $search: search }
-  }
-
   const [projects, total] = await Promise.all([
     Project.find(filter)
-      .sort(sort)
       .skip(skip)
       .limit(limitNum)
       .populate("owner", "name avatar")
@@ -94,86 +90,59 @@ const getProjects = async (userId: string, query: PaginationQuery) => {
 // ─────────────────────────────────────────────
 // GET SINGLE PROJECT
 // ─────────────────────────────────────────────
-const getProject = async (
-  projectId: string,
-  userId: string
-): Promise<ProjectDocument> => {
+const getProject = async (projectId: string, userId: string) => {
   const project = await Project.findById(projectId)
     .populate("owner", "name avatar email")
-    .populate("members", "name avatar email role")
+    .populate("members", "name avatar email")
 
-  if (!project) throw new AppError("Project not found.", 404)
+  if (!project) throw new AppError("Project not found", 404)
+
+  const ownerId = getId(project.owner)
 
   const isMember =
-    project.owner.toString() === userId ||
-    project.members.some((m: any) => m.toString() === userId)
+    ownerId === userId ||
+    project.members.some((m: any) => getId(m) === userId)
 
-  if (!isMember) {
-    throw new AppError("Access denied.", 403)
-  }
+  if (!isMember) throw new AppError("Access denied", 403)
 
   return project
 }
 
 // ─────────────────────────────────────────────
-// UPDATE PROJECT (FIXED PATTERN)
+// UPDATE PROJECT
 // ─────────────────────────────────────────────
 const updateProject = async (
   projectId: string,
   userId: string,
   body: UpdateProjectInput
-): Promise<ProjectDocument> => {
+) => {
   const project = await Project.findById(projectId)
-
-  if (!project) throw new AppError("Project not found.", 404)
+  if (!project) throw new AppError("Project not found", 404)
 
   if (project.owner.toString() !== userId) {
-    throw new AppError("Only owner can update project.", 403)
+    throw new AppError("Only owner can update", 403)
   }
 
-  const oldTitle = project.title
-
-  // ✅ UPDATED DOCUMENT
-  const updated = await Project.findByIdAndUpdate(
-    projectId,
-    body,
-    { new: true, runValidators: true }
-  ).populate("members", "name avatar email")
-
-  if (updated) {
-    // 🔔 NOTIFY ALL MEMBERS (use updated, NOT old project)
-    for (const member of updated.members as any[]) {
-      await createNotification({
-        userId: member.toString(),
-        type: "PROJECT_UPDATED",
-        message: `Project "${updated.title}" was updated`,
-        projectId: updated._id.toString(),
-      })
-    }
-  }
-
-  return updated as ProjectDocument
+  return await Project.findByIdAndUpdate(projectId, body, {
+    new: true,
+    runValidators: true,
+  })
 }
 
 // ─────────────────────────────────────────────
-// DELETE PROJECT (FIXED)
+// DELETE PROJECT
 // ─────────────────────────────────────────────
-const deleteProject = async (
-  projectId: string,
-  userId: string
-): Promise<void> => {
+const deleteProject = async (projectId: string, userId: string) => {
   const project = await Project.findById(projectId)
-
   if (!project) throw new AppError("Project not found.", 404)
 
-  if (project.owner.toString() !== userId) {
+  if (getId(project.owner) !== userId) {
     throw new AppError("Only owner can delete project.", 403)
   }
 
-  // 🔔 NOTIFY BEFORE DELETE (SAFE: using original document)
   for (const member of project.members as any[]) {
     await createNotification({
-      userId: member.toString(),
+      userId: getId(member),
       type: "PROJECT_DELETED",
       message: `Project "${project.title}" was deleted`,
       projectId: project._id.toString(),
@@ -184,35 +153,44 @@ const deleteProject = async (
 }
 
 // ─────────────────────────────────────────────
-// ADD MEMBER (FIXED)
+// ADD MEMBER
 // ─────────────────────────────────────────────
 const addMember = async (
   projectId: string,
   userId: string,
-  memberId: string
-): Promise<ProjectDocument> => {
+  email: string
+) => {
   const project = await Project.findById(projectId)
-
   if (!project) throw new AppError("Project not found.", 404)
 
-  if (project.owner.toString() !== userId) {
+  if (getId(project.owner) !== userId) {
     throw new AppError("Only owner can add members.", 403)
   }
 
+  // ─── FIND USER BY EMAIL ─────────────────────
+  const user = await User.findOne({ email })
+  if (!user) {
+    throw new AppError("User not found with this email.", 404)
+  }
+
+  const memberId = user._id.toString()
+
+  // ─── CHECK IF ALREADY MEMBER ────────────────
   const exists = project.members.some(
-    (m: any) => m.toString() === memberId
+    (m: any) => getId(m) === memberId
   )
 
   if (exists) {
     throw new AppError("User already in project.", 409)
   }
 
+  // ─── ADD MEMBER ─────────────────────────────
   project.members.push(new mongoose.Types.ObjectId(memberId))
   await project.save()
 
   await project.populate("members", "name avatar email")
 
-  // 🔔 NOTIFICATION
+  // ─── NOTIFICATION ───────────────────────────
   await createNotification({
     userId: memberId,
     type: "PROJECT_MEMBER_ADDED",
@@ -222,44 +200,45 @@ const addMember = async (
 
   return project
 }
-
 // ─────────────────────────────────────────────
-// REMOVE MEMBER (FIXED)
+// REMOVE MEMBER
 // ─────────────────────────────────────────────
 const removeMember = async (
   projectId: string,
   userId: string,
   memberId: string
-): Promise<ProjectDocument> => {
+) => {
   const project = await Project.findById(projectId)
+  if (!project) throw new AppError('Project not found.', 404)
 
-  if (!project) throw new AppError("Project not found.", 404)
-
-  if (project.owner.toString() !== userId) {
-    throw new AppError("Only owner can remove members.", 403)
+  if (getId(project.owner) !== userId) {
+    throw new AppError('Only owner can remove members.', 403)
   }
 
-  if (project.owner.toString() === memberId) {
-    throw new AppError("Cannot remove owner.", 400)
+  if (getId(project.owner) === memberId) {
+    throw new AppError('Cannot remove owner.', 400)
   }
 
   project.members = project.members.filter(
-    (m: any) => m.toString() !== memberId
+    (m: any) => getId(m) !== memberId
   )
 
   await project.save()
 
-  // 🔔 NOTIFICATION
+  // 🔥 IMPORTANT FIX
+  const updatedProject = await Project.findById(projectId)
+    .populate('members', 'name avatar email')
+    .populate('owner', 'name avatar email')
+
   await createNotification({
     userId: memberId,
-    type: "PROJECT_MEMBER_REMOVED",
+    type: 'PROJECT_MEMBER_REMOVED',
     message: `You were removed from "${project.title}"`,
     projectId: project._id.toString(),
   })
 
-  return project
+  return updatedProject
 }
-
 // ─────────────────────────────────────────────
 // EXPORT
 // ─────────────────────────────────────────────

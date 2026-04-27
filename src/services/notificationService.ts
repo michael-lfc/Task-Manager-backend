@@ -37,7 +37,7 @@ export const createNotification = async (data: CreateNotificationInput) => {
 
   // ✅ Step 4: safe socket emit (only this is wrapped)
   try {
-    io.to(data.userId).emit("notification", notification);
+    io.to(data.userId).emit("notification:new", notification);
   } catch (err) {
     console.error("Socket emit failed:", err);
   }
